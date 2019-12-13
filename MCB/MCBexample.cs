@@ -1,12 +1,13 @@
 using UnityEngine;
 using Unity.Collections;
 using System.Collections.Generic;
+using Unity.Jobs;
 using Unity.Mathematics;
 using Nezix;
 
 /// Simple example showing how to use the Marching Cubes implementation
 
-public class MCB_example : MonoBehaviour {
+public class MCBexample : MonoBehaviour {
 
 	MarchingCubesBurst mcb;
 
@@ -18,17 +19,17 @@ public class MCB_example : MonoBehaviour {
 		gridSize.z = 17;
 
 		int totalSize = gridSize.x * gridSize.y * gridSize.z;
-		float dx = 0.1f;//Size of one voxel
+		float dx = 0.05f;//Size of one voxel
 		float[] densVal = new float[totalSize];
 		Vector3 oriXInv = Vector3.zero; //Why this name ? Because you might need to invert the X axis
 
 		int id = 0;
 		for (int i = 0; i < gridSize.x; i++) {
-			float x = i * 3*dx;
+			float x = -2.0f + i * 3 * dx;
 			for (int j = 0; j < gridSize.y; j++) {
-				float y =  j * 3*dx;
+				float y =   -2.0f + j * 3 * dx;
 				for (int k = 0; k < gridSize.z; k++) {
-					float z = k * 3*dx;
+					float z = -2.0f + k * 3 * dx;
 					densVal[id++] = (x * x * x * x - 5.0f * x * x + y * y * y * y - 5.0f * y * y + z * z * z * z - 5.0f * z * z + 11.8f) * 0.2f + 0.5f;
 				}
 			}
@@ -54,7 +55,11 @@ public class MCB_example : MonoBehaviour {
 			newVerts[i].x *= -1;
 		}
 		int[] newTri = mcb.getTriangles();
-
+		Color32[] newCols = new Color32[newVerts.Length];
+		Color32 w = Color.white;
+		for (int i = 0; i < newCols.Length; i++) {
+			newCols[i] = w;
+		}
 
 		GameObject newMeshGo = new GameObject("testDX");
 
@@ -62,6 +67,8 @@ public class MCB_example : MonoBehaviour {
 		newMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
 		newMesh.vertices = newVerts;
 		newMesh.triangles = newTri;
+		newMesh.colors32 = newCols;
+
 
 
 		newMesh.RecalculateNormals();

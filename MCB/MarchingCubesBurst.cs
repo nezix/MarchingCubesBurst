@@ -6,7 +6,6 @@ using Unity.Mathematics;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Burst;
 
-
 //TODO:
 //Compute normals !
 //Implement a parallel exclusive scan using C# job system, right now this is the slowest part (because done in serial) but should be the fastest
@@ -75,6 +74,7 @@ public class MarchingCubesBurst {
 
 
 		//CountVertexPerVoxelJob
+		NativeArray<uint2> vertPerCellIn = new NativeArray<uint2>(totalSize, Allocator.TempJob);
 		NativeArray<uint2> vertPerCell = new NativeArray<uint2>(totalSize, Allocator.TempJob);
 		NativeArray<uint> compactedVoxel = new NativeArray<uint>(totalSize, Allocator.TempJob);
 
@@ -83,7 +83,7 @@ public class MarchingCubesBurst {
 			densV = values,
 			nbTriTable = nbTriTable,
 			triTable = triTable,
-			vertPerCell = vertPerCell,
+			vertPerCell = vertPerCellIn,
 			gridSize = gridSize,
 			totalVoxel = totalSize,
 			isoValue = isoValue
@@ -92,21 +92,21 @@ public class MarchingCubesBurst {
 		var countVJobHandle = countVJob.Schedule(totalSize, 128);
 		countVJobHandle.Complete();
 
+
 		//exclusivescan => compute the total number of vertices
-		uint2 lastElem = vertPerCell[totalSize - 1];
+		uint2 lastElem = vertPerCellIn[totalSize - 1];
 
 		float timerEsc = Time.realtimeSinceStartup;
 
 		var escanJob = new ExclusiveScanTrivialJob() {
-			vertPerCell = vertPerCell,
+			vertPerCell = vertPerCellIn,
+			result = vertPerCell,
 			totalVoxel = totalSize
 		};
 
 		var escanJobJobHandle = escanJob.Schedule();
 		escanJobJobHandle.Complete();
 
-
-		float timercompac = Time.realtimeSinceStartup;
 
 		uint2 lastScanElem = vertPerCell[totalSize - 1];
 
@@ -122,7 +122,8 @@ public class MarchingCubesBurst {
 
 		curVertices = new NativeArray<float3>((int)totalVerts, Allocator.Persistent);
 		curNormals = new NativeArray<float3>((int)totalVerts, Allocator.Persistent);
-		curTriangles = new NativeArray<int>((int)totalVerts, Allocator.Persistent);
+		//Double the triangles to have both faces
+		curTriangles = new NativeArray<int>((int)totalVerts * 2, Allocator.Persistent);
 
 		//compactvoxels
 
@@ -137,8 +138,6 @@ public class MarchingCubesBurst {
 		var compactJobHandle = compactJob.Schedule(totalSize, 128);
 		compactJobHandle.Complete();
 
-
-		float timerMC = Time.realtimeSinceStartup;
 
 		//MC
 		var MCJob = new MarchingCubesJob() {
@@ -159,10 +158,19 @@ public class MarchingCubesBurst {
 		MCJobHandle.Complete();
 
 
-		for (int i = 0; i < totalVerts; i++) {
+		for (int i = 0; i < totalVerts - 3; i += 3) {
 			curTriangles[i] = i;
+			curTriangles[i + 1] = i + 1;
+			curTriangles[i + 2] = i + 2;
+		}
+		//Double the triangles to have both faces
+		for (int i = (int)totalVerts; i < totalVerts * 2 - 3; i += 3) {
+			curTriangles[i] = i - (int)totalVerts;
+			curTriangles[i + 2] = i + 1 - (int)totalVerts; //Invert triangles here
+			curTriangles[i + 1] = i + 2 - (int)totalVerts;
 		}
 
+		vertPerCellIn.Dispose();
 		vertPerCell.Dispose();
 		compactedVoxel.Dispose();
 	}
@@ -274,18 +282,16 @@ public class MarchingCubesBurst {
 				return;
 			}
 
-			float voxel0 = densV[to1D(new int3(ijk.x, ijk.y, ijk.z), gridSize)];
-			float voxel1 = densV[to1D(new int3(ijk.x + 1, ijk.y, ijk.z), gridSize)];
-			float voxel2 = densV[to1D(new int3(ijk.x + 1, ijk.y + 1, ijk.z), gridSize)];
-			float voxel3 = densV[to1D(new int3(ijk.x, ijk.y + 1, ijk.z), gridSize)];
-			float voxel4 = densV[to1D(new int3(ijk.x, ijk.y, ijk.z + 1), gridSize)];
-			float voxel5 = densV[to1D(new int3(ijk.x + 1, ijk.y, ijk.z + 1), gridSize)];
-			float voxel6 = densV[to1D(new int3(ijk.x + 1, ijk.y + 1, ijk.z + 1), gridSize)];
-			float voxel7 = densV[to1D(new int3(ijk.x, ijk.y + 1, ijk.z + 1), gridSize)];
+			float voxel0 = densV[to1D(ijk, gridSize)];
+			float voxel1 = densV[to1D(ijk + new int3(1, 0, 0), gridSize)];
+			float voxel2 = densV[to1D(ijk + new int3(1, 1, 0), gridSize)];
+			float voxel3 = densV[to1D(ijk + new int3(0, 1, 0), gridSize)];
+			float voxel4 = densV[to1D(ijk + new int3(0, 0, 1), gridSize)];
+			float voxel5 = densV[to1D(ijk + new int3(1, 0, 1), gridSize)];
+			float voxel6 = densV[to1D(ijk + new int3(1, 1, 1), gridSize)];
+			float voxel7 = densV[to1D(ijk + new int3(0, 1, 1), gridSize)];
 
-			int cubeIndex = 0;
-
-			cubeIndex =   btoi(voxel0 < isoValue);
+			int cubeIndex =   btoi(voxel0 < isoValue);
 			cubeIndex += (btoi(voxel1 < isoValue)) * 2;
 			cubeIndex += (btoi(voxel2 < isoValue)) * 4;
 			cubeIndex += (btoi(voxel3 < isoValue)) * 8;
@@ -305,12 +311,14 @@ public class MarchingCubesBurst {
 	struct ExclusiveScanTrivialJob : IJob
 	{
 		public NativeArray<uint2> vertPerCell;
+		public NativeArray<uint2> result;
 		[ReadOnly] public int totalVoxel;
 
 		void IJob.Execute() {
 			for (int i = 1; i < totalVoxel; i++) {
-				vertPerCell[i] = vertPerCell[i - 1] + vertPerCell[i];
+				result[i] = vertPerCell[i - 1] + result[i - 1];
 			}
+			result[0] = new uint2(0, 0);
 		}
 	}
 
@@ -375,17 +383,16 @@ public class MarchingCubesBurst {
 			float3 v7 = p + offs;
 
 
-			float voxel0 = densV[to1D(new int3(ijk.x, ijk.y, ijk.z), gridSize)];//densV[voxel];
-			float voxel1 = densV[to1D(new int3(ijk.x + 1, ijk.y, ijk.z), gridSize)];
-			float voxel2 = densV[to1D(new int3(ijk.x + 1, ijk.y + 1, ijk.z), gridSize)];
-			float voxel3 = densV[to1D(new int3(ijk.x, ijk.y + 1, ijk.z), gridSize)];
-			float voxel4 = densV[to1D(new int3(ijk.x, ijk.y, ijk.z + 1), gridSize)];
-			float voxel5 = densV[to1D(new int3(ijk.x + 1, ijk.y, ijk.z + 1), gridSize)];
-			float voxel6 = densV[to1D(new int3(ijk.x + 1, ijk.y + 1, ijk.z + 1), gridSize)];
-			float voxel7 = densV[to1D(new int3(ijk.x, ijk.y + 1, ijk.z + 1), gridSize)];
+			float voxel0 = densV[to1D(ijk, gridSize)];
+			float voxel1 = densV[to1D(ijk + new int3(1, 0, 0), gridSize)];
+			float voxel2 = densV[to1D(ijk + new int3(1, 1, 0), gridSize)];
+			float voxel3 = densV[to1D(ijk + new int3(0, 1, 0), gridSize)];
+			float voxel4 = densV[to1D(ijk + new int3(0, 0, 1), gridSize)];
+			float voxel5 = densV[to1D(ijk + new int3(1, 0, 1), gridSize)];
+			float voxel6 = densV[to1D(ijk + new int3(1, 1, 1), gridSize)];
+			float voxel7 = densV[to1D(ijk + new int3(0, 1, 1), gridSize)];
 
-			int cubeIndex = 0;
-			cubeIndex =   btoi(voxel0 < isoValue);
+			int cubeIndex =   btoi(voxel0 < isoValue);
 			cubeIndex += (btoi(voxel1 < isoValue)) * 2;
 			cubeIndex += (btoi(voxel2 < isoValue)) * 4;
 			cubeIndex += (btoi(voxel3 < isoValue)) * 8;
@@ -416,6 +423,8 @@ public class MarchingCubesBurst {
 					return;
 				int edge = triTable[i + cubeIndex * 16]; // ==> triTable[cubeIndex][i]
 
+				//Avoid using an array by doing a lot of if...
+				//TODO: improve that part
 				if (edge == 0) vertices[id] = verts0;
 				else if (edge == 1 ) vertices[id] = verts1 ;
 				else if (edge == 2 ) vertices[id] = verts2 ;
