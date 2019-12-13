@@ -7,7 +7,6 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Burst;
 
 //TODO:
-//Compute normals !
 //Implement a parallel exclusive scan using C# job system, right now this is the slowest part (because done in serial) but should be the fastest
 //Avoid copying tritable arrays to native arrays by correctly initialize them
 
@@ -16,7 +15,6 @@ public class MarchingCubesBurst {
 
 	NativeArray<float> values;
 	NativeArray<float3> curVertices;
-	/// Not filled for now !
 	NativeArray<float3> curNormals;
 	NativeArray<int> curTriangles;
 	NativeArray<int> nbTriTable;
@@ -142,7 +140,6 @@ public class MarchingCubesBurst {
 		//MC
 		var MCJob = new MarchingCubesJob() {
 			vertices = curVertices,
-			normals = curNormals,
 			compVoxel = compactedVoxel,
 			vertPerCell = vertPerCell,
 			densV = values,
@@ -365,8 +362,6 @@ public class MarchingCubesBurst {
 
 		[NativeDisableParallelForRestriction]
 		public NativeArray<float3> vertices;
-		[NativeDisableParallelForRestriction]
-		public NativeArray<float3> normals;
 		[ReadOnly] public NativeArray<uint> compVoxel;
 		[ReadOnly] public NativeArray<uint2> vertPerCell;
 		[ReadOnly] public NativeArray<float> densV;
@@ -508,14 +503,6 @@ public class MarchingCubesBurst {
 		[ReadOnly] public int3 gridSize;
 
 		void IJobParallelFor.Execute(int index) {
-			// float3 p = vertices[index];
-			// p *= dx;
-
-			// float3 p1 = p + new float3(1.0f / gridSize.x, 0.0f, 0.0f);
-			// float3 p2 = p - new float3(1.0f / gridSize.x, 0.0f, 0.0f);
-
-			// float3 n;
-			// n.x = densV
 
 			float3 v = vertices[index];
 			int3 ijk = (int3)((v - oriGrid) / dx);
