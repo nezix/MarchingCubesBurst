@@ -45,6 +45,7 @@ public class MCBexample : MonoBehaviour {
 		mcb.computeIsoSurface(isoValue);
 
 		Vector3[] newVerts = mcb.getVertices();
+		Vector3[] newNorms = mcb.getNormals();
 		if (newVerts.Length == 0) {
 			Debug.Log("Empty mesh");
 			mcb.Clean();
@@ -53,6 +54,7 @@ public class MCBexample : MonoBehaviour {
 		//Invert x of each vertex
 		for (int i = 0; i < newVerts.Length; i++) {
 			newVerts[i].x *= -1;
+			newNorms[i].x *= -1;
 		}
 		int[] newTri = mcb.getTriangles();
 		Color32[] newCols = new Color32[newVerts.Length];
@@ -68,10 +70,7 @@ public class MCBexample : MonoBehaviour {
 		newMesh.vertices = newVerts;
 		newMesh.triangles = newTri;
 		newMesh.colors32 = newCols;
-
-
-
-		newMesh.RecalculateNormals();
+		newMesh.normals = newNorms;
 
 		MeshFilter mf = newMeshGo.AddComponent<MeshFilter>();
 		mf.mesh = newMesh;
@@ -79,8 +78,6 @@ public class MCBexample : MonoBehaviour {
 		MeshRenderer mr = newMeshGo.AddComponent<MeshRenderer>();
 
 		Material mat = new Material(Shader.Find("Standard"));
-		mat.SetFloat("_Glossiness", 0.0f);
-		mat.SetFloat("_Metallic", 0.0f);
 
 		mr.material = mat;
 

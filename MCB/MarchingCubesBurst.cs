@@ -115,7 +115,6 @@ public class MarchingCubesBurst {
 
 		if (totalVerts <= 0) {
 			Debug.LogWarning("Empty iso-surface");
-			vertPerCellIn.Dispose();
 			vertPerCell.Dispose();
 			compactedVoxel.Dispose();
 			return;
@@ -158,6 +157,18 @@ public class MarchingCubesBurst {
 		var MCJobHandle = MCJob.Schedule((int)newTotalVoxels, 128);
 		MCJobHandle.Complete();
 
+		//Normals
+		var NormJob = new ComputeNormalsJob() {
+			normals = curNormals,
+			vertices = curVertices,
+			densV = values,
+			oriGrid = originGrid,
+			dx = dx,
+			gridSize = gridSize
+		};
+		var NormJobHandle = NormJob.Schedule((int)totalVerts, 128);
+		NormJobHandle.Complete();
+
 
 		for (int i = 0; i < totalVerts - 3; i += 3) {
 			curTriangles[i] = i;
@@ -179,6 +190,11 @@ public class MarchingCubesBurst {
 	public Vector3[] getVertices() {
 		Vector3[] res = new Vector3[curVertices.Length];
 		SetNativeVertexArray(res, curVertices);
+		return res;
+	}
+	public Vector3[] getNormals() {
+		Vector3[] res = new Vector3[curNormals.Length];
+		SetNativeVertexArray(res, curNormals);
 		return res;
 	}
 	public int[] getTriangles() {
@@ -476,6 +492,62 @@ public class MarchingCubesBurst {
 		float3 vertexInterp(float iso, float3 p0, float3 p1, float f0, float f1) {
 			float t = (iso - f0) / (f1 - f0);
 			return math.lerp(p0, p1, t);
+		}
+	}
+
+	[BurstCompile]
+	struct ComputeNormalsJob : IJobParallelFor
+	{
+		[NativeDisableParallelForRestriction]
+		public NativeArray<float3> normals;
+
+		[ReadOnly] public NativeArray<float3> vertices;
+		[ReadOnly] public NativeArray<float> densV;
+		[ReadOnly] public float3 oriGrid;
+		[ReadOnly] public float dx;
+		[ReadOnly] public int3 gridSize;
+
+		void IJobParallelFor.Execute(int index) {
+			// float3 p = vertices[index];
+			// p *= dx;
+
+			// float3 p1 = p + new float3(1.0f / gridSize.x, 0.0f, 0.0f);
+			// float3 p2 = p - new float3(1.0f / gridSize.x, 0.0f, 0.0f);
+
+			// float3 n;
+			// n.x = densV
+
+			float3 v = vertices[index];
+			int3 ijk = (int3)((v - oriGrid) / dx);
+
+			int id = to1D(ijk, gridSize);
+			float field0 = densV[id];
+			float field1 = densV[id];
+			float field2 = densV[id];
+			float field3 = densV[id];
+			float field4 = densV[id];
+			float field5 = densV[id];
+
+			if (ijk.x < gridSize.x - 1)
+				field0 = densV[to1D(ijk + new int3(1, 0, 0), gridSize)];
+			if (ijk.x > 0)
+				field1 = densV[to1D(ijk - new int3(1, 0, 0), gridSize)];
+			if (ijk.y < gridSize.y - 1)
+				field2 = densV[to1D(ijk + new int3(0, 1, 0), gridSize)];
+			if (ijk.y > 0)
+				field3 = densV[to1D(ijk - new int3(0, 1, 0), gridSize)];
+			if (ijk.z < gridSize.z - 1)
+				field4 = densV[to1D(ijk + new int3(0, 0, 1), gridSize)];
+			if (ijk.z > 0)
+				field5 = densV[to1D(ijk - new int3(0, 0, 1), gridSize)];
+
+			float3 n;
+			n.x = field1 - field0;
+			n.y = field3 - field2;
+			n.z = field5 - field4;
+
+			normals[index] = n;
+
 		}
 	}
 
