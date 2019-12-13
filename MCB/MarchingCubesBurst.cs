@@ -115,6 +115,7 @@ public class MarchingCubesBurst {
 
 		if (totalVerts <= 0) {
 			Debug.LogWarning("Empty iso-surface");
+			vertPerCellIn.Dispose();
 			vertPerCell.Dispose();
 			compactedVoxel.Dispose();
 			return;
