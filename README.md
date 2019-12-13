@@ -1,6 +1,10 @@
-# MarchingCubesBurst
+# MarchingCubesBurst (Work in Progress !)
 
 Multithreaded Marching Cubes algorithm implementation using Unity C# job system, compiled by Burst compiler
+
+#### There is still a bug in the current implementation, missing triangles.
+
+It can be used as a Unity Package, add the URL of the repository in your package manifest.json.
 
 I need to benchmark it but it seems really fast...
 
@@ -15,7 +19,7 @@ Feel free to add more...
 
 ## Contribute
 
-Pull requests + Issues are more than welcome ! I am also curious to know how it is used :)
+Pull requests + Issues tracking are more than welcome ! I am also curious to know how it is used :)
 
 ## License
 
